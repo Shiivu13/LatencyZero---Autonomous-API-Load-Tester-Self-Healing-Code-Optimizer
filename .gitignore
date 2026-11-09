@@ -1,0 +1,24 @@
+# Environment Secrets (DO NOT COMMIT)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+*.sqlite3
+*.db
+
+# Node / Frontend
+node_modules/
+dist/
+.next/
+.turbo/
+
+# System
+.DS_Store
+Thumbs.db
