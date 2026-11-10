@@ -4,10 +4,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
+from typing import Optional
+from pydantic import BaseModel
 from target_app.database import get_db, init_db
 from dashboard.stream import generate_optimization_events
 
 DASHBOARD_HTML = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
+
+
+class OptimizeRequest(BaseModel):
+    case: str = "case1"
+    custom_code: Optional[str] = None
 
 
 @asynccontextmanager
@@ -38,10 +45,24 @@ def dashboard():
 
 
 @app.get("/api/stream/optimize")
-async def stream_optimize(case: str = "case1"):
+async def stream_optimize(case: str = "case1", custom_code: Optional[str] = None):
     """Streams live autonomous optimization progress via Server-Sent Events (SSE)."""
     return StreamingResponse(
-        generate_optimization_events(case),
+        generate_optimization_events(case, custom_code),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.post("/api/stream/optimize")
+async def post_stream_optimize(req: OptimizeRequest):
+    """POST variant allowing large custom code snippets to be streamed via SSE."""
+    return StreamingResponse(
+        generate_optimization_events(req.case, req.custom_code),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

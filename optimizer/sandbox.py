@@ -5,7 +5,9 @@ import sqlite3
 import time
 import traceback
 from typing import Any, Callable, Dict, Optional, Tuple
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
+import requests
+import httpx
 from target_app.database import get_db, init_db
 
 
@@ -25,7 +27,11 @@ class DynamicSandbox:
             "get_db": get_db,
             "init_db": init_db,
             "FastAPI": FastAPI,
+            "APIRouter": APIRouter,
             "app": self.app,
+            "router": APIRouter(),
+            "requests": requests,
+            "httpx": httpx,
             "time": time,
             "asyncio": asyncio,
             "sqlite3": sqlite3,
@@ -43,7 +49,7 @@ class DynamicSandbox:
         """
         try:
             # 1. AST Syntax validation
-            ast.parse(code_string)
+            tree = ast.parse(code_string)
         except Exception:
             return False, None, traceback.format_exc()
 
@@ -58,10 +64,18 @@ class DynamicSandbox:
         target_fn = None
         if function_name and function_name in namespace and callable(namespace[function_name]):
             target_fn = namespace[function_name]
-        else:
-            # Look for any callable defined in the namespace
+
+        if not target_fn:
+            # Find function from AST walk
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if node.name in namespace and callable(namespace[node.name]):
+                        target_fn = namespace[node.name]
+                        break
+
+        if not target_fn:
             for k, v in namespace.items():
-                if callable(v) and getattr(v, "__module__", None) is None:
+                if callable(v) and getattr(v, "__module__", None) in (None, "__main__"):
                     target_fn = v
                     break
 
@@ -76,6 +90,13 @@ class DynamicSandbox:
         Handles both sync and async functions reliably without socket or event-loop hangs.
         """
         try:
+            # Inspect parameters to call with default dummy arguments if required
+            sig = inspect.signature(func)
+            call_kwargs = {}
+            for name, param in sig.parameters.items():
+                if param.default is inspect.Parameter.empty:
+                    call_kwargs[name] = {} if "dict" in str(param.annotation).lower() else None
+
             if inspect.iscoroutinefunction(func):
                 async def _safe_sleep(*args, **kwargs):
                     return None
@@ -83,8 +104,7 @@ class DynamicSandbox:
                 orig_sleep = asyncio.sleep
                 try:
                     asyncio.sleep = _safe_sleep
-                    coro = func()
-                    # Pure-Python trampoline to drive coroutine without IOCP thread deadlock
+                    coro = func(**call_kwargs)
                     stack = [coro]
                     val = None
                     while stack:
@@ -101,11 +121,7 @@ class DynamicSandbox:
                 finally:
                     asyncio.sleep = orig_sleep
             else:
-                res = func()
-
-            # Verify response is valid
-            if not isinstance(res, dict):
-                return False, None, f"Expected dictionary return value, received: {type(res)}"
+                res = func(**call_kwargs)
 
             return True, res, None
         except Exception:
@@ -118,7 +134,9 @@ class DynamicSandbox:
         http_method: str = "GET"
     ) -> str:
         """Mounts the verified function to a dynamic sandbox route on the FastAPI app."""
-        func_name = getattr(func, "__name__", "optimized")
+        func_name = getattr(func, "__name__", "custom_endpoint")
+        if not func_name or func_name == "<lambda>":
+            func_name = "custom_endpoint"
         path = sandbox_path or f"/api/sandbox/{func_name}"
 
         # Remove existing sandbox route if already registered

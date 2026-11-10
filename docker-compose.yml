@@ -1,0 +1,13 @@
+services:
+  latencyzero:
+    build: .
+    container_name: latencyzero-app
+    ports:
+      - "8000:7860"
+    environment:
+      - PORT=7860
+      - BHARATCODE_BASE_URL=https://bharatcode.ai/api/model/v1
+    env_file:
+      - .env
+    restart: unless-stopped
+

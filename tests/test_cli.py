@@ -15,3 +15,4 @@ def test_cli_runner_all_cases(capsys):
     assert "case1" in captured.out
     assert "case2" in captured.out
     assert "case3" in captured.out
+

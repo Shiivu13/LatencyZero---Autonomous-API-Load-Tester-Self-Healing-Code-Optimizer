@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: latencyzero
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: BHARATCODE_API_KEY
+        sync: false
+      - key: BHARATCODE_BASE_URL
+        value: https://bharatcode.ai/api/model/v1
+      - key: PORT
+        value: "10000"

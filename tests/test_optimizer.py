@@ -162,3 +162,32 @@ def test_self_healing_auto_heal_recovery():
     assert "ZeroDivisionError" in result.attempts_history[0].error_traceback
     assert result.attempts_history[1].success is True
 
+
+def test_self_healing_custom_code_with_requests():
+    """Verifies that user-pasted custom code with synchronous requests is optimized cleanly."""
+    from analyzer.extractor import EndpointCodeSnippet
+    custom_snippet = EndpointCodeSnippet(
+        func_name="enrich_profiles",
+        is_async=False,
+        route_path="/api/enrich-profiles",
+        http_method="POST",
+        start_line=1,
+        end_line=5,
+        code_string=(
+            '@router.post("/api/enrich-profiles")\n'
+            'def enrich_profiles():\n'
+            '    response = requests.get("https://api.github.com/users/octocat")\n'
+            '    return {"status": "enriched"}\n'
+        )
+    )
+    loop = SelfHealingLoop()
+    result = loop.optimize_and_heal(
+        endpoint_snippet=custom_snippet,
+        baseline_metrics={"p50_ms": 185.0},
+        mount_to_sandbox=True
+    )
+    assert result.status in ("success", "healed")
+    assert result.sandbox_route == "/api/sandbox/enrich_profiles"
+    assert "None" not in result.sandbox_route
+    assert "requests" in result.bottleneck_diagnosis.lower()
+
