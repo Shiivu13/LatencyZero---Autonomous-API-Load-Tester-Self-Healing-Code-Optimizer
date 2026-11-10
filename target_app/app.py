@@ -1,8 +1,13 @@
+import os
 import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from target_app.database import get_db, init_db
+from dashboard.stream import generate_optimization_events
+
+DASHBOARD_HTML = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
 
 
 @asynccontextmanager
@@ -12,8 +17,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="LatencyZero - Slow Target App",
-    description="Intentional performance bottlenecks for autonomous optimization benchmark",
+    title="LatencyZero - Slow Target App & Autonomous Optimizer",
+    description="Intentional performance bottlenecks with autonomous self-healing optimization dashboard",
     lifespan=lifespan
 )
 
@@ -24,6 +29,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/")
+def dashboard():
+    """Serves the 3-panel LatencyZero live optimization dashboard."""
+    return FileResponse(DASHBOARD_HTML)
+
+
+@app.get("/api/stream/optimize")
+async def stream_optimize(case: str = "case1"):
+    """Streams live autonomous optimization progress via Server-Sent Events (SSE)."""
+    return StreamingResponse(
+        generate_optimization_events(case),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @app.get("/health")

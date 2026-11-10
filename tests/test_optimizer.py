@@ -161,3 +161,4 @@ def test_self_healing_auto_heal_recovery():
     assert result.attempts_history[0].success is False
     assert "ZeroDivisionError" in result.attempts_history[0].error_traceback
     assert result.attempts_history[1].success is True
+

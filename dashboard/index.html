@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LatencyZero - Autonomous API Load-Tester & Code Optimizer</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js CDN for Before vs After Latency Bar Chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Highlight.js for Syntax Highlighting in Code Diff -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              dark: '#0B0F19'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #07090E;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .glow-green {
+      box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.4);
+    }
+    .glow-blue {
+      box-shadow: 0 0 25px -5px rgba(59, 130, 246, 0.3);
+    }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col selection:bg-emerald-500 selection:text-black">
+
+  <!-- ======================== TOP NAVBAR ======================== -->
+  <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 px-6 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- Brand & Tagline -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/20">
+          <i data-lucide="zap" class="w-6 h-6 stroke-[2.5]"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-extrabold tracking-tight text-white">Latency<span class="text-emerald-400">Zero</span></h1>
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Autonomous Agent</span>
+          </div>
+          <p class="text-xs text-slate-400">Autonomous API Load-Tester & Self-Healing Code Optimizer</p>
+        </div>
+      </div>
+
+      <!-- Case Selection Buttons -->
+      <div class="flex items-center bg-slate-900/90 border border-slate-800 rounded-xl p-1 gap-1 text-xs font-medium">
+        <button onclick="selectCase('case1')" id="btn-case1" class="px-3 py-1.5 rounded-lg transition-all text-white bg-slate-800 font-semibold shadow-sm">
+          Case 1: N+1 Loop
+        </button>
+        <button onclick="selectCase('case2')" id="btn-case2" class="px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200">
+          Case 2: Sync I/O Block
+        </button>
+        <button onclick="selectCase('case3')" id="btn-case3" class="px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200">
+          Case 3: Heavy JSON O(N²)
+        </button>
+      </div>
+
+      <!-- Action Button -->
+      <div class="flex items-center gap-3">
+        <div id="status-badge" class="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="status-text">Engine Ready</span>
+        </div>
+        <button id="run-demo-btn" onclick="startOptimizationDemo()" class="glow-green flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm tracking-wide shadow-lg transition-all transform active:scale-95 disabled:opacity-50">
+          <i data-lucide="play" class="w-4 h-4 fill-slate-950"></i>
+          <span>Run Live Optimization Demo</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ======================== MAIN DASHBOARD (3-PART LAYOUT) ======================== -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- ----------------- PART 1: LEFT - LIVE AGENT TERMINAL STREAM (4 COLS) ----------------- -->
+    <section class="lg:col-span-4 flex flex-col bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm">
+      <!-- Terminal Header -->
+      <div class="px-4 py-3 bg-slate-950 border-b border-slate-800/80 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+          <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+          <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+          <span class="ml-2 text-xs font-mono font-medium text-slate-400">agent_stream.log</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400">
+          <i data-lucide="activity" class="w-3.5 h-3.5 animate-pulse"></i>
+          <span>SSE LIVE</span>
+        </div>
+      </div>
+
+      <!-- Terminal Output Container -->
+      <div id="terminal-logs" class="flex-1 p-4 font-mono text-xs overflow-y-auto max-h-[620px] min-h-[480px] custom-scrollbar space-y-2 leading-relaxed bg-[#050811]">
+        <div class="text-slate-500">// LatencyZero Autonomous Stream Monitor v1.0</div>
+        <div class="text-slate-500">// Waiting for user trigger... Click [Run Live Optimization Demo] above.</div>
+      </div>
+
+      <!-- Agent Step Progress Bar -->
+      <div class="p-3 bg-slate-950/80 border-t border-slate-800 flex items-center gap-3">
+        <span class="text-[11px] font-mono text-slate-400">Progress:</span>
+        <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+          <div id="progress-bar" class="bg-gradient-to-r from-emerald-500 to-cyan-400 h-full w-0 transition-all duration-300"></div>
+        </div>
+        <span id="progress-label" class="text-xs font-mono font-bold text-emerald-400">0%</span>
+      </div>
+    </section>
+
+    <!-- ----------------- PART 2: CENTER - BEFORE VS AFTER LATENCY BAR CHART (4 COLS) ----------------- -->
+    <section class="lg:col-span-4 flex flex-col bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm p-4 sm:p-5">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="bar-chart-3" class="w-5 h-5 text-emerald-400"></i>
+            Latency Benchmark
+          </h2>
+          <p class="text-xs text-slate-400">Real-time p50/p95 latency comparison (50 parallel reqs)</p>
+        </div>
+        <span id="speedup-badge" class="hidden text-xs font-extrabold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          98% Faster
+        </span>
+      </div>
+
+      <!-- 4 KPI Summary Cards -->
+      <div class="grid grid-cols-2 gap-2.5 mb-4">
+        <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">p50 Latency</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="kpi-p50" class="text-lg font-mono font-bold text-white">-- ms</span>
+            <span id="delta-p50" class="text-xs font-bold text-slate-500">--</span>
+          </div>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">p95 Latency</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="kpi-p95" class="text-lg font-mono font-bold text-white">-- ms</span>
+            <span id="delta-p95" class="text-xs font-bold text-slate-500">--</span>
+          </div>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Throughput (RPS)</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="kpi-rps" class="text-lg font-mono font-bold text-white">-- req/s</span>
+            <span id="delta-rps" class="text-xs font-bold text-slate-500">--</span>
+          </div>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Speedup Multiplier</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="kpi-speedup" class="text-lg font-mono font-bold text-emerald-400">-- x</span>
+            <span class="text-[11px] font-bold text-emerald-400">Faster</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart.js Container -->
+      <div class="flex-1 min-h-[260px] relative bg-slate-950/50 rounded-xl p-3 border border-slate-800/80 flex items-center justify-center">
+        <canvas id="latencyChart"></canvas>
+      </div>
+
+      <!-- Bottleneck Strategy Note -->
+      <div id="strategy-box" class="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+        <div class="text-[10px] uppercase tracking-wider font-bold text-emerald-400 mb-1 flex items-center gap-1.5">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+          BharatCode AI Optimization Strategy
+        </div>
+        <p id="strategy-text" class="text-slate-300 leading-relaxed">
+          Select a case and click 'Run Live Optimization Demo' to watch the autonomous optimization loop.
+        </p>
+      </div>
+    </section>
+
+    <!-- ----------------- PART 3: RIGHT - CODE DIFF VIEW (4 COLS) ----------------- -->
+    <section class="lg:col-span-4 flex flex-col bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm">
+      <!-- Code Diff Header -->
+      <div class="px-4 py-3 bg-slate-950 border-b border-slate-800/80 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="git-compare" class="w-4 h-4 text-cyan-400"></i>
+          <span class="text-xs font-bold text-white uppercase tracking-wider">Code Diff Inspector</span>
+        </div>
+        <div class="flex items-center gap-2 text-[11px]">
+          <span class="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono">- Slow</span>
+          <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">+ Optimized</span>
+        </div>
+      </div>
+
+      <!-- Code Panels Container -->
+      <div class="flex-1 flex flex-col overflow-y-auto max-h-[640px] custom-scrollbar p-3 gap-3">
+        <!-- Before Panel -->
+        <div class="rounded-xl border border-rose-500/30 bg-[#0c101c] overflow-hidden">
+          <div class="px-3 py-1.5 bg-rose-950/30 border-b border-rose-500/20 flex items-center justify-between text-[11px] font-mono text-rose-300">
+            <span>Original Slow Code (AST Extracted)</span>
+            <span class="text-[10px] text-rose-400">🔴 Bottleneck</span>
+          </div>
+          <pre class="p-3 text-xs font-mono overflow-x-auto"><code id="code-before" class="language-python"># Click "Run Live Optimization Demo" to inspect code</code></pre>
+        </div>
+
+        <!-- After Panel -->
+        <div class="rounded-xl border border-emerald-500/30 bg-[#0c101c] overflow-hidden">
+          <div class="px-3 py-1.5 bg-emerald-950/30 border-b border-emerald-500/20 flex items-center justify-between text-[11px] font-mono text-emerald-300">
+            <span>BharatCode AI Patch (Sandbox Verified)</span>
+            <span class="text-[10px] text-emerald-400">🟢 Production Ready</span>
+          </div>
+          <pre class="p-3 text-xs font-mono overflow-x-auto"><code id="code-after" class="language-python"># Optimized code will appear here after AI patch compilation</code></pre>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================== FOOTER ======================== -->
+  <footer class="border-t border-slate-800/80 bg-slate-950 px-6 py-2.5 text-center text-xs text-slate-500 flex items-center justify-between">
+    <span>Built for BharatCode Hackathon 2026 • Track: Coding & Developer Tools</span>
+    <span class="font-mono text-slate-400">100% Free Stack: FastAPI + SQLite + BharatCode LLM + SSE</span>
+  </footer>
+
+  <!-- ======================== JAVASCRIPT LOGIC ======================== -->
+  <script>
+    lucide.createIcons();
+
+    let currentCase = 'case1';
+    let chartInstance = null;
+
+    // Initialize Chart.js
+    function initChart() {
+      const ctx = document.getElementById('latencyChart').getContext('2d');
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: ['p50 Latency (ms)', 'p95 Latency (ms)', 'Average (ms)'],
+          datasets: [
+            {
+              label: 'Before (Slow)',
+              data: [34.2, 56.5, 35.8],
+              backgroundColor: 'rgba(244, 63, 94, 0.75)',
+              borderColor: 'rgba(244, 63, 94, 1)',
+              borderWidth: 1.5,
+              borderRadius: 6
+            },
+            {
+              label: 'After (Optimized)',
+              data: [3.6, 4.9, 3.8],
+              backgroundColor: 'rgba(16, 185, 129, 0.85)',
+              borderColor: 'rgba(16, 185, 129, 1)',
+              borderWidth: 1.5,
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw} ms`
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: 'rgba(51, 65, 85, 0.4)' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
+            }
+          }
+        }
+      });
+    }
+
+    // Switch Selected Case
+    function selectCase(caseId) {
+      currentCase = caseId;
+      ['case1', 'case2', 'case3'].forEach(id => {
+        const btn = document.getElementById(`btn-${id}`);
+        if (id === caseId) {
+          btn.className = "px-3 py-1.5 rounded-lg transition-all text-white bg-slate-800 font-semibold shadow-sm";
+        } else {
+          btn.className = "px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200";
+        }
+      });
+      appendLog(`[System] Switched active test target to: ${caseId.toUpperCase()}`);
+    }
+
+    // Terminal Logger
+    function appendLog(text, colorClass = "text-slate-300") {
+      const logs = document.getElementById('terminal-logs');
+      const time = new Date().toLocaleTimeString();
+      const line = document.createElement('div');
+      line.className = "flex items-start gap-2";
+      line.innerHTML = `<span class="text-slate-600 select-none">[${time}]</span> <span class="${colorClass}">${text}</span>`;
+      logs.appendChild(line);
+      logs.scrollTop = logs.scrollHeight;
+    }
+
+    // Trigger Live SSE Stream
+    function startOptimizationDemo() {
+      const btn = document.getElementById('run-demo-btn');
+      const statusText = document.getElementById('status-text');
+      const progressBar = document.getElementById('progress-bar');
+      const progressLabel = document.getElementById('progress-label');
+
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i><span>Optimizing Live...</span>`;
+      lucide.createIcons();
+      statusText.innerText = "Running Optimization Loop...";
+
+      appendLog(`▶ Starting Autonomous Optimization run for ${currentCase.toUpperCase()}...`, "text-cyan-400 font-bold");
+
+      const eventSource = new EventSource(`/api/stream/optimize?case=${currentCase}`);
+
+      eventSource.onmessage = function (event) {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.progress) {
+            progressBar.style.width = `${data.progress}%`;
+            progressLabel.innerText = `${data.progress}%`;
+          }
+
+          if (data.stage === "init") {
+            appendLog(`[1/7] ${data.message}`, "text-yellow-400");
+          } else if (data.stage === "load_test_before") {
+            appendLog(`[2/7] ${data.message}`, "text-purple-400");
+          } else if (data.stage === "baseline_results") {
+            appendLog(`[3/7] ${data.message}`, "text-rose-400 font-bold");
+            updateBaselineKPIs(data.metrics);
+          } else if (data.stage === "ast_inspect") {
+            appendLog(`[4/7] ${data.message}`, "text-cyan-400");
+          } else if (data.stage === "ai_optimizing") {
+            appendLog(`[5/7] ${data.message}`, "text-amber-300 animate-pulse");
+          } else if (data.stage === "ai_response") {
+            appendLog(`[6/7] ${data.message}`, "text-emerald-400 font-semibold");
+          } else if (data.stage === "sandbox_mount") {
+            appendLog(`[7/7] ${data.message}`, "text-emerald-300");
+          } else if (data.stage === "completed") {
+            appendLog(`✓ ${data.message}`, "text-emerald-400 font-bold bg-emerald-950/40 p-2 rounded border border-emerald-500/30");
+            finishOptimization(data);
+            eventSource.close();
+            btn.disabled = false;
+            btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-slate-950"></i><span>Run Live Optimization Demo</span>`;
+            lucide.createIcons();
+            statusText.innerText = `Verified (${data.speedup_multiplier}x Faster)`;
+          }
+        } catch (e) {
+          console.error("Failed to parse SSE", e);
+        }
+      };
+
+      eventSource.onerror = function (err) {
+        console.error("SSE Error:", err);
+        eventSource.close();
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-slate-950"></i><span>Run Live Optimization Demo</span>`;
+        lucide.createIcons();
+        statusText.innerText = "Stream Disconnected";
+      };
+    }
+
+    function updateBaselineKPIs(before) {
+      document.getElementById('kpi-p50').innerText = `${before.p50} ms`;
+      document.getElementById('kpi-p95').innerText = `${before.p95} ms`;
+      document.getElementById('kpi-rps').innerText = `${before.rps}`;
+    }
+
+    function finishOptimization(data) {
+      // Update KPIs
+      document.getElementById('kpi-p50').innerText = `${data.after.p50} ms`;
+      document.getElementById('delta-p50').innerText = `-${data.reduction_pct}%`;
+      document.getElementById('delta-p50').className = "text-xs font-bold text-emerald-400";
+
+      document.getElementById('kpi-p95').innerText = `${data.after.p95} ms`;
+      document.getElementById('delta-p95').innerText = `-${Math.round(((data.before.p95 - data.after.p95)/data.before.p95)*100)}%`;
+      document.getElementById('delta-p95').className = "text-xs font-bold text-emerald-400";
+
+      document.getElementById('kpi-rps').innerText = `${data.after.rps}`;
+      document.getElementById('delta-rps').innerText = `+${Math.round(((data.after.rps - data.before.rps)/data.before.rps)*100)}%`;
+      document.getElementById('delta-rps').className = "text-xs font-bold text-emerald-400";
+
+      document.getElementById('kpi-speedup').innerText = `${data.speedup_multiplier} x`;
+
+      const speedupBadge = document.getElementById('speedup-badge');
+      speedupBadge.innerText = `${data.speedup_multiplier}x Faster (${data.reduction_pct}% Drop)`;
+      speedupBadge.classList.remove('hidden');
+
+      // Update Chart
+      chartInstance.data.datasets[0].data = [data.before.p50, data.before.p95, data.before.avg];
+      chartInstance.data.datasets[1].data = [data.after.p50, data.after.p95, data.after.avg];
+      chartInstance.update();
+
+      // Update Strategy Note
+      document.getElementById('strategy-text').innerText = `${data.diagnosis} ${data.strategy}`;
+
+      // Update Code Diff View
+      const codeBeforeEl = document.getElementById('code-before');
+      const codeAfterEl = document.getElementById('code-after');
+      codeBeforeEl.textContent = data.original_code;
+      codeAfterEl.textContent = data.optimized_code;
+      hljs.highlightElement(codeBeforeEl);
+      hljs.highlightElement(codeAfterEl);
+    }
+
+    window.onload = function() {
+      initChart();
+    };
+  </script>
+</body>
+</html>
+
