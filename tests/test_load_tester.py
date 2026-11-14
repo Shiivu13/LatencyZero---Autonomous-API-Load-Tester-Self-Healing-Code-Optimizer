@@ -1,5 +1,4 @@
-import pytest
-from load_tester.tester import _calculate_percentile, LoadTestResult, run_load_test
+from load_tester.tester import _calculate_percentile, LoadTestResult
 
 
 def test_percentile_calculations():
@@ -43,3 +42,21 @@ def test_load_test_result_summary():
     assert "p50=25.0" in summary
     assert "p95=45.0" in summary
 
+
+
+def test_local_server_benchmark():
+    from fastapi import FastAPI
+    from load_tester.tester import LocalServer, benchmark_url
+
+    app = FastAPI()
+
+    @app.get("/ping")
+    def ping():
+        return {"ok": True}
+
+    with LocalServer(app) as server:
+        result = benchmark_url(server.base_url + "/ping", concurrency=2, total_requests=6)
+
+    assert result.successful_requests == 6
+    assert result.failed_requests == 0
+    assert result.p50_ms > 0

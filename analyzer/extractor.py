@@ -1,7 +1,7 @@
 import ast
 import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, List, Optional
 
 
 @dataclass

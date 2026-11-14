@@ -1,5 +1,5 @@
 import os
-from target_app.app import slow_n_plus_one, slow_sync_blocking, slow_heavy_json
+from target_app.app import slow_n_plus_one
 from analyzer.extractor import extract_from_function, extract_from_file, extract_all_endpoints
 
 

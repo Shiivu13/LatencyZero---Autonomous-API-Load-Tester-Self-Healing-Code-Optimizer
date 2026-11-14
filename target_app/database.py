@@ -3,16 +3,18 @@ import sqlite3
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "demo.db")
 
+NUM_USERS = 5000
+ORDERS_PER_USER = 10
+
 
 def get_db():
-    """Returns a SQLite connection with Row factory."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """Initializes SQLite schema and seeds test data."""
+    """Create the schema and seed it. Re-seeds if the row counts don't match."""
     conn = get_db()
     with conn:
         conn.execute("""
@@ -22,7 +24,7 @@ def init_db():
                 email TEXT NOT NULL
             )
         """)
-        # Intentionally unindexed table for Case 1 demonstration
+        # No index on orders.user_id on purpose: every lookup by user is a full scan.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS orders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,24 +35,27 @@ def init_db():
             )
         """)
 
-        # Seed data if empty
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM users")
-        if cur.fetchone()[0] == 0:
-            users_data = [(f"User {i}", f"user{i}@example.com") for i in range(1, 51)]
-            cur.executemany("INSERT INTO users (name, email) VALUES (?, ?)", users_data)
-
-            orders_data = []
-            for user_id in range(1, 51):
-                for order_idx in range(1, 11):
-                    orders_data.append((
-                        user_id,
-                        round(19.99 * order_idx, 2),
-                        "completed" if order_idx % 2 == 0 else "pending",
-                        "2026-11-10T12:00:00"
-                    ))
-            cur.executemany(
+        expected_orders = NUM_USERS * ORDERS_PER_USER
+        users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        orders = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
+        if users != NUM_USERS or orders != expected_orders:
+            conn.execute("DELETE FROM orders")
+            conn.execute("DELETE FROM users")
+            conn.executemany(
+                "INSERT INTO users (id, name, email) VALUES (?, ?, ?)",
+                [(i, f"User {i}", f"user{i}@example.com") for i in range(1, NUM_USERS + 1)],
+            )
+            conn.executemany(
                 "INSERT INTO orders (user_id, amount, status, created_at) VALUES (?, ?, ?, ?)",
-                orders_data
+                [
+                    (
+                        user_id,
+                        round(19.99 * n, 2),
+                        "completed" if n % 2 == 0 else "pending",
+                        "2026-11-10T12:00:00",
+                    )
+                    for user_id in range(1, NUM_USERS + 1)
+                    for n in range(1, ORDERS_PER_USER + 1)
+                ],
             )
     conn.close()

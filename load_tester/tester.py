@@ -1,9 +1,18 @@
+import argparse
 import asyncio
+import json
 import math
+import os
+import socket
+import subprocess
+import sys
+import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Dict, List, Optional
+import anyio
 import httpx
+import uvicorn
 
 
 @dataclass
@@ -84,9 +93,9 @@ async def run_load_test(
     client: Optional[httpx.AsyncClient] = None,
     timeout: float = 30.0
 ) -> LoadTestResult:
-    """
-    Executes a high-throughput parallel load test against `url` using `asyncio.gather`.
-    Measures requests/second and p50, p95, p99 latencies in milliseconds.
+    """Send `total_requests` requests to `url`, at most `concurrency` at a time.
+
+    Latencies are only recorded for successful (< 400) responses.
     """
     sem = asyncio.Semaphore(concurrency)
     latencies: List[float] = []
@@ -101,20 +110,18 @@ async def run_load_test(
             _worker(sem, http_client, method, url, headers, latencies, failures)
             for _ in range(total_requests)
         ]
-        # Run parallel requests using asyncio.gather as mandated by spec
         await asyncio.gather(*tasks)
     finally:
         if manage_client:
             await http_client.aclose()
 
-    total_time = time.perf_counter() - start_time
-    total_time = max(total_time, 0.0001)
+    total_time = max(time.perf_counter() - start_time, 1e-6)
 
     sorted_lats = sorted(latencies)
     success_count = len(sorted_lats)
     fail_count = len(failures)
 
-    rps = total_requests / total_time if total_time > 0 else 0.0
+    rps = success_count / total_time
     p50 = _calculate_percentile(sorted_lats, 50.0)
     p95 = _calculate_percentile(sorted_lats, 95.0)
     p99 = _calculate_percentile(sorted_lats, 99.0)
@@ -139,3 +146,116 @@ async def run_load_test(
         latencies_ms=sorted_lats
     )
 
+
+
+
+class _LimitThreads:
+    """ASGI wrapper that caps the threadpool used for sync (def) endpoints.
+
+    Starlette's default allows 40 threads. With more threads than cores, sqlite
+    reads in one process slow each other down a lot, which hides the effect of
+    the code change we want to measure. Cap at the core count, as you would
+    with gunicorn/uvicorn workers in production.
+    """
+
+    def __init__(self, app, threads: int):
+        self.app = app
+        self.threads = threads
+        self._configured = False
+
+    async def __call__(self, scope, receive, send):
+        if not self._configured:
+            anyio.to_thread.current_default_thread_limiter().total_tokens = self.threads
+            self._configured = True
+        await self.app(scope, receive, send)
+
+
+class LocalServer:
+    """Serve an ASGI app with uvicorn on 127.0.0.1 from a background thread.
+
+    The benchmark client runs on its own event loop, so an endpoint that blocks
+    the server's loop shows up as queueing latency, the same as in production.
+    """
+
+    def __init__(self, app, threads: Optional[int] = None, startup_timeout: float = 10.0):
+        self.app = _LimitThreads(app, threads or os.cpu_count() or 4)
+        self.startup_timeout = startup_timeout
+        self.base_url = ""
+        self._server = None
+        self._thread = None
+
+    def start(self) -> "LocalServer":
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Accepted connections inherit this. Without it, Nagle + delayed ACK on
+        # loopback adds ~40 ms to responses that are written in two chunks.
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+
+        config = uvicorn.Config(self.app, log_level="warning", lifespan="off", access_log=False)
+        self._server = uvicorn.Server(config)
+        self._thread = threading.Thread(target=self._server.run, kwargs={"sockets": [sock]}, daemon=True)
+        self._thread.start()
+
+        deadline = time.monotonic() + self.startup_timeout
+        while not self._server.started:
+            if time.monotonic() > deadline or not self._thread.is_alive():
+                self.stop()
+                raise RuntimeError("benchmark server did not start")
+            time.sleep(0.01)
+
+        self.base_url = f"http://127.0.0.1:{port}"
+        return self
+
+    def stop(self) -> None:
+        if self._server is not None:
+            self._server.should_exit = True
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+    def __enter__(self) -> "LocalServer":
+        return self.start()
+
+    def __exit__(self, *exc) -> None:
+        self.stop()
+
+
+def benchmark_url(
+    url: str,
+    concurrency: int = 20,
+    total_requests: int = 20,
+    method: str = "GET",
+) -> LoadTestResult:
+    """Run a load test from a separate Python process and return the result.
+
+    The client lives in its own process so it doesn't compete with the server
+    for the GIL; in-process clients add tens of milliseconds of noise.
+    """
+    cmd = [
+        sys.executable, "-m", "load_tester.tester", url,
+        "--requests", str(total_requests),
+        "--concurrency", str(concurrency),
+        "--method", method,
+    ]
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=root, timeout=300)
+    if proc.returncode != 0:
+        raise RuntimeError(f"load test failed: {proc.stderr.strip()[-500:]}")
+    return LoadTestResult(**json.loads(proc.stdout))
+
+
+async def _run_cli(args) -> LoadTestResult:
+    # trust_env=False: never send local benchmark traffic through an HTTP proxy.
+    async with httpx.AsyncClient(timeout=args.timeout, trust_env=False) as client:
+        return await run_load_test(args.url, args.concurrency, args.requests, args.method, client=client)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Load test one URL and print the result as JSON.")
+    parser.add_argument("url")
+    parser.add_argument("--requests", type=int, default=50)
+    parser.add_argument("--concurrency", type=int, default=50)
+    parser.add_argument("--method", default="GET")
+    parser.add_argument("--timeout", type=float, default=30.0)
+    result = asyncio.run(_run_cli(parser.parse_args()))
+    print(json.dumps(asdict(result)))

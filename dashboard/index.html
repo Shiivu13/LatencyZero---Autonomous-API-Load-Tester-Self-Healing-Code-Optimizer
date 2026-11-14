@@ -1,38 +1,17 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LatencyZero - Autonomous API Load-Tester & Code Optimizer</title>
-  <!-- Tailwind CSS CDN -->
+  <title>LatencyZero</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Lucide Icons CDN -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Chart.js CDN for Before vs After Latency Bar Chart -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Highlight.js for Syntax Highlighting in Code Diff -->
+  <script src="https://unpkg.com/lucide@0.400.0/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/diff.min.js"></script>
 
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#ecfdf5',
-              500: '#10b981',
-              600: '#059669',
-              dark: '#0B0F19'
-            }
-          }
-        }
-      }
-    }
-  </script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body {
@@ -72,11 +51,10 @@
 </head>
 <body class="text-slate-100 min-h-screen flex flex-col selection:bg-emerald-500 selection:text-black">
 
-  <!-- ======================== TOP NAVBAR ======================== -->
+  <!-- Header -->
   <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50 px-6 py-3">
     <div class="max-w-[1700px] mx-auto flex flex-wrap items-center justify-between gap-4">
       
-      <!-- Brand & Tagline -->
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/20">
           <i data-lucide="zap" class="w-6 h-6 stroke-[2.5]"></i>
@@ -84,16 +62,11 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-xl font-extrabold tracking-tight text-white">Latency<span class="text-emerald-400">Zero</span></h1>
-            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Autonomous Agent</span>
-            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span> Self-Healing Active
-            </span>
           </div>
-          <p class="text-xs text-slate-400">Autonomous API Load-Tester & Self-Healing Code Optimizer</p>
+          <p class="text-xs text-slate-400">Load test an endpoint, rewrite the slow part, measure it again</p>
         </div>
       </div>
 
-      <!-- Case Selection Buttons -->
       <div class="flex items-center bg-slate-900/90 border border-slate-800 rounded-xl p-1 gap-1 text-xs font-medium">
         <button onclick="selectCase('case1')" id="btn-case1" class="px-3 py-1.5 rounded-lg transition-all text-white bg-slate-800 font-semibold shadow-sm">
           Case 1: N+1 Loop
@@ -106,74 +79,68 @@
         </button>
         <button onclick="selectCase('custom')" id="btn-custom" class="px-3 py-1.5 rounded-lg transition-all text-amber-400 hover:text-amber-200 flex items-center gap-1">
           <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
-          Paste Custom Code
+          Review your code
         </button>
       </div>
 
-      <!-- Action Button -->
       <div class="flex items-center gap-3">
         <div id="status-badge" class="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span id="status-text">Engine Ready</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="status-text">Ready</span>
         </div>
         <button id="run-demo-btn" onclick="startOptimizationDemo()" class="glow-green flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm tracking-wide shadow-lg transition-all transform active:scale-95 disabled:opacity-50">
           <i data-lucide="play" class="w-4 h-4 fill-slate-950"></i>
-          <span>Run Live Optimization Demo</span>
+          <span>Run</span>
         </button>
       </div>
 
     </div>
   </header>
 
-  <!-- ======================== CUSTOM CODE INPUT DRAWER (TOGGLEABLE) ======================== -->
+  <!-- Custom code input -->
   <section id="custom-code-drawer" class="hidden border-b border-amber-500/30 bg-amber-950/20 px-6 py-4">
     <div class="max-w-[1700px] mx-auto">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-wider">
           <i data-lucide="code-2" class="w-4 h-4"></i>
-          Paste Your Own Slow Python Endpoint (Live BharatCode AI Optimizer)
+          Paste a Python endpoint
         </div>
-        <span class="text-[11px] text-slate-400">Paste any Python function with a slow loop, blocking call, or N+1 query.</span>
+        <span class="text-[11px] text-slate-400">Static review only: pasted code is analysed and rewritten, never executed or benchmarked.</span>
       </div>
-      <textarea id="custom-code-input" rows="7" class="w-full font-mono text-xs p-3 rounded-xl bg-slate-950 border border-amber-500/30 text-amber-200 focus:outline-none focus:border-amber-400 custom-scrollbar" placeholder="# Paste your Python FastAPI endpoint code here...">import requests
+      <textarea id="custom-code-input" rows="7" class="w-full font-mono text-xs p-3 rounded-xl bg-slate-950 border border-amber-500/30 text-amber-200 focus:outline-none focus:border-amber-400 custom-scrollbar" placeholder="# Paste a FastAPI endpoint here">import time
+
+import requests
 from fastapi import APIRouter
 
 router = APIRouter()
 
-@router.post("/api/enrich-profiles")
-def enrich_profiles():
-    # Sync blocking HTTP request inside API endpoint
-    response = requests.get("https://api.github.com/users/octocat")
-    return {"status": "enriched", "data": response.json()}</textarea>
+
+@router.get("/api/profile/{username}")
+async def get_profile(username: str):
+    response = requests.get(f"https://api.github.com/users/{username}", timeout=5)
+    time.sleep(0.1)  # crude rate limiting
+    return {"profile": response.json()}</textarea>
     </div>
   </section>
 
-  <!-- ======================== MAIN DASHBOARD (3-PART LAYOUT) ======================== -->
+  
   <main class="flex-1 max-w-[1700px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
 
-    <!-- ----------------- PART 1: LEFT - LIVE AGENT TERMINAL STREAM (4 COLS) ----------------- -->
+    <!-- Log -->
     <section class="lg:col-span-4 flex flex-col bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm">
-      <!-- Terminal Header -->
       <div class="px-4 py-3 bg-slate-950 border-b border-slate-800/80 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
           <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
           <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
-          <span class="ml-2 text-xs font-mono font-medium text-slate-400">agent_stream.log</span>
-        </div>
-        <div class="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400">
-          <i data-lucide="activity" class="w-3.5 h-3.5 animate-pulse"></i>
-          <span>SSE LIVE</span>
+          <span class="ml-2 text-xs font-mono font-medium text-slate-400">run log</span>
         </div>
       </div>
 
-      <!-- Terminal Output Container -->
       <div id="terminal-logs" class="flex-1 p-4 font-mono text-xs overflow-y-auto max-h-[620px] min-h-[480px] custom-scrollbar space-y-2 leading-relaxed bg-[#050811]">
-        <div class="text-slate-500">// LatencyZero Autonomous Stream Monitor v1.0</div>
-        <div class="text-slate-500">// Waiting for user trigger... Click [Run Live Optimization Demo] above.</div>
+        <div class="text-slate-500">Pick a case and press Run.</div>
       </div>
 
-      <!-- Agent Step Progress Bar -->
       <div class="p-3 bg-slate-950/80 border-t border-slate-800 flex items-center gap-3">
         <span class="text-[11px] font-mono text-slate-400">Progress:</span>
         <div class="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
@@ -183,7 +150,7 @@ def enrich_profiles():
       </div>
     </section>
 
-    <!-- ----------------- PART 2: CENTER - BEFORE VS AFTER LATENCY BAR CHART (4 COLS) ----------------- -->
+    <!-- Benchmark -->
     <section class="lg:col-span-4 flex flex-col bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm p-4 sm:p-5">
       <div class="flex items-center justify-between mb-4">
         <div>
@@ -191,14 +158,12 @@ def enrich_profiles():
             <i data-lucide="bar-chart-3" class="w-5 h-5 text-emerald-400"></i>
             Latency Benchmark
           </h2>
-          <p class="text-xs text-slate-400">Real-time p50/p95 latency comparison (50 parallel reqs)</p>
+          <p id="bench-subtitle" class="text-xs text-slate-400">Measured on this server, before and after the rewrite</p>
         </div>
         <span id="speedup-badge" class="hidden text-xs font-extrabold px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-          98% Faster
         </span>
       </div>
 
-      <!-- 4 KPI Summary Cards -->
       <div class="grid grid-cols-2 gap-2.5 mb-4">
         <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
           <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">p50 Latency</span>
@@ -222,42 +187,38 @@ def enrich_profiles():
           </div>
         </div>
         <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
-          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Speedup Multiplier</span>
+          <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">p50 speedup</span>
           <div class="flex items-baseline justify-between mt-1">
-            <span id="kpi-speedup" class="text-lg font-mono font-bold text-emerald-400">-- x</span>
-            <span class="text-[11px] font-bold text-emerald-400">Faster</span>
+            <span id="kpi-speedup" class="text-lg font-mono font-bold text-emerald-400">--</span>
           </div>
         </div>
       </div>
 
-      <!-- Chart.js Container -->
       <div class="flex-1 min-h-[260px] relative bg-slate-950/50 rounded-xl p-3 border border-slate-800/80 flex items-center justify-center">
         <canvas id="latencyChart"></canvas>
       </div>
 
-      <!-- Bottleneck Strategy Note -->
       <div id="strategy-box" class="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs">
         <div class="text-[10px] uppercase tracking-wider font-bold text-emerald-400 mb-1 flex items-center gap-1.5">
-          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-          BharatCode AI Optimization Strategy
+          <i data-lucide="search" class="w-3.5 h-3.5"></i>
+          Diagnosis
         </div>
         <p id="strategy-text" class="text-slate-300 leading-relaxed">
-          Select a case or paste custom code, then click 'Run Live Optimization Demo'.
+          Results show up here after a run.
         </p>
+        <p id="source-text" class="mt-2 text-[11px] text-slate-500"></p>
       </div>
     </section>
 
-    <!-- ----------------- PART 3: RIGHT - CODE DIFF VIEW & .PATCH DOWNLOAD (4 COLS) ----------------- -->
+    <!-- Code -->
     <section class="lg:col-span-4 flex flex-col bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm">
-      <!-- Code Diff Header -->
       <div class="px-4 py-3 bg-slate-950 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <i data-lucide="git-compare" class="w-4 h-4 text-cyan-400"></i>
-          <span class="text-xs font-bold text-white uppercase tracking-wider">Code Diff Inspector</span>
+          <span class="text-xs font-bold text-white uppercase tracking-wider">Code</span>
         </div>
         
         <div class="flex items-center gap-2">
-          <!-- View Tabs -->
           <div class="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-[11px] font-mono">
             <button id="tab-split" onclick="switchDiffTab('split')" class="px-2 py-0.5 rounded bg-slate-800 text-white font-semibold">
               Split
@@ -267,7 +228,6 @@ def enrich_profiles():
             </button>
           </div>
 
-          <!-- Download Patch Button -->
           <button id="download-patch-btn" onclick="downloadPatchFile()" class="hidden px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 font-mono font-bold flex items-center gap-1.5 transition-all text-[11px]">
             <i data-lucide="download" class="w-3.5 h-3.5"></i>
             <span>Download</span>
@@ -275,16 +235,13 @@ def enrich_profiles():
         </div>
       </div>
 
-      <!-- Code Panels Container -->
       <div class="flex-1 flex flex-col p-3 gap-3 overflow-y-auto max-h-[660px] custom-scrollbar">
-        <!-- Split View Container (Both Panels) -->
         <div id="view-split-container" class="flex flex-col gap-3">
-          <!-- Before Panel -->
           <div class="rounded-xl border border-rose-500/30 bg-[#0c101c] overflow-hidden flex flex-col">
             <div class="px-3 py-1.5 bg-rose-950/30 border-b border-rose-500/20 flex items-center justify-between text-[11px] font-mono text-rose-300">
               <span class="flex items-center gap-1.5 font-bold">
                 <span class="w-2 h-2 rounded-full bg-rose-500"></span>
-                Original Slow Code (AST Extracted)
+                Original
               </span>
               <div class="flex items-center gap-1.5">
                 <button onclick="toggleExpand('code-before-pre', this)" class="text-[10px] text-rose-400 hover:text-rose-200 flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-950/50 border border-rose-500/20 transition-all cursor-pointer">
@@ -295,15 +252,14 @@ def enrich_profiles():
                 </button>
               </div>
             </div>
-            <pre id="code-before-pre" class="p-3 text-xs font-mono max-h-[250px] overflow-y-auto overflow-x-auto custom-scrollbar select-text"><code id="code-before" class="language-python"># Click "Run Live Optimization Demo" to inspect code</code></pre>
+            <pre id="code-before-pre" class="p-3 text-xs font-mono max-h-[250px] overflow-y-auto overflow-x-auto custom-scrollbar select-text"><code id="code-before" class="language-python"></code></pre>
           </div>
 
-          <!-- After Panel -->
           <div class="rounded-xl border border-emerald-500/30 bg-[#0c101c] overflow-hidden flex flex-col">
             <div class="px-3 py-1.5 bg-emerald-950/30 border-b border-emerald-500/20 flex items-center justify-between text-[11px] font-mono text-emerald-300">
               <span class="flex items-center gap-1.5 font-bold">
                 <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                BharatCode AI Patch (Sandbox Verified)
+                <span id="after-label">Rewritten</span>
               </span>
               <div class="flex items-center gap-1.5">
                 <button onclick="toggleExpand('code-after-pre', this)" class="text-[10px] text-emerald-400 hover:text-emerald-200 flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/20 transition-all cursor-pointer">
@@ -314,19 +270,17 @@ def enrich_profiles():
                 </button>
               </div>
             </div>
-            <pre id="code-after-pre" class="p-3 text-xs font-mono max-h-[250px] overflow-y-auto overflow-x-auto custom-scrollbar select-text"><code id="code-after" class="language-python"># Optimized code will appear here after AI patch compilation</code></pre>
+            <pre id="code-after-pre" class="p-3 text-xs font-mono max-h-[250px] overflow-y-auto overflow-x-auto custom-scrollbar select-text"><code id="code-after" class="language-python"></code></pre>
           </div>
         </div>
 
-        <!-- Unified Diff View (Collapsible Tab) -->
         <div id="view-diff-container" class="hidden rounded-xl border border-cyan-500/30 bg-[#0c101c] overflow-hidden flex flex-col">
           <div class="px-3 py-1.5 bg-cyan-950/30 border-b border-cyan-500/20 flex items-center justify-between text-[11px] font-mono text-cyan-300">
             <span class="flex items-center gap-1.5 font-bold">
               <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-              Unified Git Diff (.patch representation)
+              Unified diff
             </span>
             <div class="flex items-center gap-2">
-              <span class="text-[10px] text-cyan-400 font-mono">git apply compatible</span>
               <button onclick="toggleExpand('code-diff-pre', this)" class="text-[10px] text-cyan-400 hover:text-cyan-200 flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-950/50 border border-cyan-500/20 transition-all cursor-pointer">
                 <i data-lucide="maximize-2" class="w-3 h-3"></i> Expand
               </button>
@@ -335,330 +289,327 @@ def enrich_profiles():
               </button>
             </div>
           </div>
-          <pre id="code-diff-pre" class="p-3 text-xs font-mono max-h-[520px] overflow-y-auto overflow-x-auto custom-scrollbar select-text"><code id="code-diff" class="language-diff"># Unified diff will appear here after optimization</code></pre>
+          <pre id="code-diff-pre" class="p-3 text-xs font-mono max-h-[520px] overflow-y-auto overflow-x-auto custom-scrollbar select-text"><code id="code-diff" class="language-diff"></code></pre>
         </div>
       </div>
     </section>
 
   </main>
 
-  <!-- ======================== FOOTER ======================== -->
+  
   <footer class="border-t border-slate-800/80 bg-slate-950 px-6 py-2.5 text-center text-xs text-slate-500 flex items-center justify-between">
-    <span>Built for BharatCode Hackathon 2026 • Track: Coding & Developer Tools</span>
-    <span class="font-mono text-slate-400">100% Free Stack: FastAPI + SQLite + BharatCode LLM + SSE + Docker</span>
+    <span>LatencyZero · BharatCode Hackathon 2026</span>
+    <a class="font-mono text-slate-400 hover:text-slate-200" href="/docs">API docs</a>
   </footer>
 
-  <!-- ======================== JAVASCRIPT LOGIC ======================== -->
+  
   <script>
-    lucide.createIcons();
+    const STAGE_PROGRESS = {
+      start: 5, load_test: 20, baseline: 35, extract: 45, issue: 50,
+      optimize: 60, note: 62, attempt: 75, after: 95, done: 100,
+    };
+    const STAGE_STYLE = {
+      start: "text-cyan-400 font-semibold",
+      load_test: "text-purple-400",
+      baseline: "text-rose-400",
+      extract: "text-slate-300",
+      issue: "text-amber-300",
+      optimize: "text-slate-300",
+      note: "text-slate-400",
+      attempt: "text-emerald-300",
+      after: "text-emerald-400",
+      error: "text-rose-400 font-semibold",
+    };
+    const SOURCE_LABEL = {
+      "offline:reference-fix": "offline mode: hand-written reference fix",
+      "offline:rewrite": "offline mode: automatic rewrite",
+      "offline:none": "offline mode: no rewrite",
+    };
 
-    let currentCase = 'case1';
-    let chartInstance = null;
-    let currentPatchContent = "";
+    let currentCase = "case1";
+    let chart = null;
+    let currentPatch = "";
+    let progress = 0;
 
-    // Initialize Chart.js
+    // The page should still work if a CDN script fails to load.
+    const refreshIcons = () => window.lucide && lucide.createIcons();
+
+    function sourceLabel(source) {
+      if (!source) return "";
+      if (source.startsWith("llm:")) return `LLM: ${source.slice(4)}`;
+      return SOURCE_LABEL[source] || source;
+    }
+
     function initChart() {
-      const ctx = document.getElementById('latencyChart').getContext('2d');
-      chartInstance = new Chart(ctx, {
-        type: 'bar',
+      if (!window.Chart) return;
+      const ctx = document.getElementById("latencyChart").getContext("2d");
+      chart = new Chart(ctx, {
+        type: "bar",
         data: {
-          labels: ['p50 Latency (ms)', 'p95 Latency (ms)', 'Average (ms)'],
+          labels: ["p50 (ms)", "p95 (ms)", "avg (ms)"],
           datasets: [
-            {
-              label: 'Before (Slow)',
-              data: [34.2, 56.5, 35.8],
-              backgroundColor: 'rgba(244, 63, 94, 0.75)',
-              borderColor: 'rgba(244, 63, 94, 1)',
-              borderWidth: 1.5,
-              borderRadius: 6
-            },
-            {
-              label: 'After (Optimized)',
-              data: [3.6, 4.9, 3.8],
-              backgroundColor: 'rgba(16, 185, 129, 0.85)',
-              borderColor: 'rgba(16, 185, 129, 1)',
-              borderWidth: 1.5,
-              borderRadius: 6
-            }
-          ]
+            { label: "Before", data: [], backgroundColor: "rgba(244, 63, 94, 0.75)", borderRadius: 6 },
+            { label: "After", data: [], backgroundColor: "rgba(16, 185, 129, 0.85)", borderRadius: 6 },
+          ],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: {
-              labels: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } }
-            },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw} ms`
-              }
-            }
+            legend: { labels: { color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } } },
+            tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.raw} ms` } },
           },
           scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(51, 65, 85, 0.4)' },
-              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
-            },
-            x: {
-              grid: { display: false },
-              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono' } }
-            }
-          }
-        }
+            y: { beginAtZero: true, grid: { color: "rgba(51, 65, 85, 0.4)" }, ticks: { color: "#94a3b8" } },
+            x: { grid: { display: false }, ticks: { color: "#94a3b8" } },
+          },
+        },
       });
     }
 
-    // Switch Selected Case
+    function setCode(id, text) {
+      const el = document.getElementById(id);
+      el.textContent = text || "";
+      el.removeAttribute("data-highlighted");
+      if (text && window.hljs) hljs.highlightElement(el);
+    }
+
+    function resetResults() {
+      for (const k of ["p50", "p95", "rps"]) {
+        document.getElementById(`kpi-${k}`).innerText = "--";
+        const d = document.getElementById(`delta-${k}`);
+        d.innerText = "";
+        d.className = "text-xs font-bold text-slate-500";
+      }
+      document.getElementById("kpi-speedup").innerText = "--";
+      document.getElementById("speedup-badge").classList.add("hidden");
+      document.getElementById("download-patch-btn").classList.add("hidden");
+      document.getElementById("source-text").innerText = "";
+      currentPatch = "";
+      if (chart) {
+        chart.data.datasets[0].data = [];
+        chart.data.datasets[1].data = [];
+        chart.update();
+      }
+    }
+
     function selectCase(caseId) {
       currentCase = caseId;
-      const drawer = document.getElementById('custom-code-drawer');
-      const codeBeforeEl = document.getElementById('code-before');
-      const codeAfterEl = document.getElementById('code-after');
-      const codeDiffEl = document.getElementById('code-diff');
+      const drawer = document.getElementById("custom-code-drawer");
+      drawer.classList.toggle("hidden", caseId !== "custom");
+      document.getElementById("bench-subtitle").innerText = caseId === "custom"
+        ? "Pasted code is not benchmarked"
+        : "Measured on this server, before and after the rewrite";
 
-      if (caseId === 'custom') {
-        drawer.classList.remove('hidden');
-        const customVal = document.getElementById('custom-code-input').value;
-        codeBeforeEl.textContent = customVal;
-        codeAfterEl.textContent = "# Click 'Run Live Optimization Demo' to generate verified AI patch";
-        codeDiffEl.textContent = "# Unified git diff will appear here after AI patch compilation";
-        hljs.highlightElement(codeBeforeEl);
-        document.getElementById('strategy-text').innerText = "Paste your custom Python endpoint in the amber drawer above, then click 'Run Live Optimization Demo'.";
-      } else {
-        drawer.classList.add('hidden');
-        codeBeforeEl.textContent = "# Click 'Run Live Optimization Demo' to inspect code";
-        codeAfterEl.textContent = "# Optimized code will appear here after AI patch compilation";
-        codeDiffEl.textContent = "# Unified diff will appear here";
-      }
+      setCode("code-before", "");
+      setCode("code-after", "");
+      setCode("code-diff", "");
+      resetResults();
 
-      ['case1', 'case2', 'case3', 'custom'].forEach(id => {
+      for (const id of ["case1", "case2", "case3", "custom"]) {
         const btn = document.getElementById(`btn-${id}`);
-        if (id === caseId) {
-          btn.className = id === 'custom'
+        const active = id === caseId;
+        if (id === "custom") {
+          btn.className = active
             ? "px-3 py-1.5 rounded-lg transition-all text-amber-200 bg-amber-950/60 border border-amber-500/40 font-semibold shadow-sm flex items-center gap-1"
-            : "px-3 py-1.5 rounded-lg transition-all text-white bg-slate-800 font-semibold shadow-sm";
+            : "px-3 py-1.5 rounded-lg transition-all text-amber-400 hover:text-amber-200 flex items-center gap-1";
         } else {
-          btn.className = id === 'custom'
-            ? "px-3 py-1.5 rounded-lg transition-all text-amber-400 hover:text-amber-200 flex items-center gap-1"
+          btn.className = active
+            ? "px-3 py-1.5 rounded-lg transition-all text-white bg-slate-800 font-semibold shadow-sm"
             : "px-3 py-1.5 rounded-lg transition-all text-slate-400 hover:text-slate-200";
         }
-      });
-      appendLog(`[System] Active test target switched to: ${caseId.toUpperCase()}`);
+      }
     }
 
-    // Terminal Logger
-    function appendLog(text, colorClass = "text-slate-300") {
-      const logs = document.getElementById('terminal-logs');
-      const time = new Date().toLocaleTimeString();
-      const line = document.createElement('div');
+    function appendLog(text, cls = "text-slate-300") {
+      const logs = document.getElementById("terminal-logs");
+      const line = document.createElement("div");
       line.className = "flex items-start gap-2";
-      line.innerHTML = `<span class="text-slate-600 select-none">[${time}]</span> <span class="${colorClass}">${text}</span>`;
+      const time = document.createElement("span");
+      time.className = "text-slate-600 select-none";
+      time.textContent = new Date().toLocaleTimeString();
+      const msg = document.createElement("span");
+      msg.className = cls;
+      msg.textContent = text;
+      line.append(time, msg);
       logs.appendChild(line);
       logs.scrollTop = logs.scrollHeight;
     }
 
-    // Trigger Live SSE Stream
-    function startOptimizationDemo() {
-      const btn = document.getElementById('run-demo-btn');
-      const statusText = document.getElementById('status-text');
-      const progressBar = document.getElementById('progress-bar');
-      const progressLabel = document.getElementById('progress-label');
-
-      btn.disabled = true;
-      btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i><span>Optimizing Live...</span>`;
-      lucide.createIcons();
-      statusText.innerText = "Running Optimization Loop...";
-
-      let streamUrl = `/api/stream/optimize?case=${currentCase}`;
-      if (currentCase === 'custom') {
-        const customCode = document.getElementById('custom-code-input').value;
-        streamUrl += `&custom_code=${encodeURIComponent(customCode)}`;
-      }
-
-      appendLog(`▶ Starting Autonomous Optimization run for ${currentCase.toUpperCase()}...`, "text-cyan-400 font-bold");
-
-      const eventSource = new EventSource(streamUrl);
-
-      eventSource.onmessage = function (event) {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.progress) {
-            progressBar.style.width = `${data.progress}%`;
-            progressLabel.innerText = `${data.progress}%`;
-          }
-
-          if (data.stage === "init") {
-            appendLog(`[1/7] ${data.message}`, "text-yellow-400");
-          } else if (data.stage === "load_test_before") {
-            appendLog(`[2/7] ${data.message}`, "text-purple-400");
-          } else if (data.stage === "baseline_results") {
-            appendLog(`[3/7] ${data.message}`, "text-rose-400 font-bold");
-            updateBaselineKPIs(data.metrics);
-          } else if (data.stage === "ast_inspect") {
-            appendLog(`[4/7] ${data.message}`, "text-cyan-400");
-          } else if (data.stage === "ai_optimizing") {
-            appendLog(`[5/7] ${data.message}`, "text-amber-300 animate-pulse");
-          } else if (data.stage === "ai_response") {
-            appendLog(`[6/7] ${data.message}`, "text-emerald-400 font-semibold");
-          } else if (data.stage === "sandbox_mount") {
-            appendLog(`[7/7] ${data.message}`, "text-emerald-300");
-          } else if (data.stage === "completed") {
-            appendLog(`✓ ${data.message}`, "text-emerald-400 font-bold bg-emerald-950/40 p-2 rounded border border-emerald-500/30");
-            finishOptimization(data);
-            eventSource.close();
-            btn.disabled = false;
-            btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-slate-950"></i><span>Run Live Optimization Demo</span>`;
-            lucide.createIcons();
-            statusText.innerText = `Verified (${data.speedup_multiplier}x Faster)`;
-          }
-        } catch (e) {
-          console.error("Failed to parse SSE", e);
-        }
-      };
-
-      eventSource.onerror = function (err) {
-        console.error("SSE Error:", err);
-        eventSource.close();
-        btn.disabled = false;
-        btn.innerHTML = `<i data-lucide="play" class="w-4 h-4 fill-slate-950"></i><span>Run Live Optimization Demo</span>`;
-        lucide.createIcons();
-        statusText.innerText = "Stream Disconnected";
-      };
+    function setProgress(stage) {
+      progress = stage === null ? 0 : Math.max(progress, STAGE_PROGRESS[stage] || progress);
+      document.getElementById("progress-bar").style.width = `${progress}%`;
+      document.getElementById("progress-label").innerText = `${progress}%`;
     }
 
-    function updateBaselineKPIs(before) {
-      document.getElementById('kpi-p50').innerText = `${before.p50} ms`;
-      document.getElementById('kpi-p95').innerText = `${before.p95} ms`;
-      document.getElementById('kpi-rps').innerText = `${before.rps}`;
+    function setRunning(running) {
+      const btn = document.getElementById("run-demo-btn");
+      btn.disabled = running;
+      btn.innerHTML = running
+        ? '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i><span>Running...</span>'
+        : '<i data-lucide="play" class="w-4 h-4 fill-slate-950"></i><span>Run</span>';
+      refreshIcons();
     }
 
-    function finishOptimization(data) {
-      // Update KPIs
-      document.getElementById('kpi-p50').innerText = `${data.after.p50} ms`;
-      document.getElementById('delta-p50').innerText = `-${data.reduction_pct}%`;
-      document.getElementById('delta-p50').className = "text-xs font-bold text-emerald-400";
-
-      document.getElementById('kpi-p95').innerText = `${data.after.p95} ms`;
-      document.getElementById('delta-p95').innerText = `-${Math.round(((data.before.p95 - data.after.p95)/data.before.p95)*100)}%`;
-      document.getElementById('delta-p95').className = "text-xs font-bold text-emerald-400";
-
-      document.getElementById('kpi-rps').innerText = `${data.after.rps}`;
-      document.getElementById('delta-rps').innerText = `+${Math.round(((data.after.rps - data.before.rps)/data.before.rps)*100)}%`;
-      document.getElementById('delta-rps').className = "text-xs font-bold text-emerald-400";
-
-      document.getElementById('kpi-speedup').innerText = `${data.speedup_multiplier} x`;
-
-      const speedupBadge = document.getElementById('speedup-badge');
-      speedupBadge.innerText = `${data.speedup_multiplier}x Faster (${data.reduction_pct}% Drop)`;
-      speedupBadge.classList.remove('hidden');
-
-      // Update Chart
-      chartInstance.data.datasets[0].data = [data.before.p50, data.before.p95, data.before.avg];
-      chartInstance.data.datasets[1].data = [data.after.p50, data.after.p95, data.after.avg];
-      chartInstance.update();
-
-      // Update Strategy Note
-      let cleanStrategy = data.strategy || "";
-      if (!cleanStrategy || cleanStrategy.includes("Exhausted")) {
-        cleanStrategy = "AST & Sandbox verified with 0 runtime errors.";
-      }
-      document.getElementById('strategy-text').innerText = `${data.diagnosis} ${cleanStrategy}`;
-
-      // Update Code Diff View
-      const codeBeforeEl = document.getElementById('code-before');
-      const codeAfterEl = document.getElementById('code-after');
-      codeBeforeEl.textContent = data.original_code;
-      codeAfterEl.textContent = data.optimized_code;
-      hljs.highlightElement(codeBeforeEl);
-      hljs.highlightElement(codeAfterEl);
-
-      // Unified Diff & Download Patch Button
-      if (data.patch_diff) {
-        currentPatchContent = data.patch_diff;
-        const codeDiffEl = document.getElementById('code-diff');
-        codeDiffEl.textContent = data.patch_diff;
-        hljs.highlightElement(codeDiffEl);
-
-        const patchBtn = document.getElementById('download-patch-btn');
-        patchBtn.classList.remove('hidden');
-      }
-    }
-
-    // Switch between Split and Unified .patch tabs
-    function switchDiffTab(tab) {
-      const splitBtn = document.getElementById('tab-split');
-      const diffBtn = document.getElementById('tab-diff');
-      const splitContainer = document.getElementById('view-split-container');
-      const diffContainer = document.getElementById('view-diff-container');
-
-      if (tab === 'split') {
-        splitBtn.className = "px-2 py-0.5 rounded bg-slate-800 text-white font-semibold";
-        diffBtn.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white";
-        splitContainer.classList.remove('hidden');
-        diffContainer.classList.add('hidden');
-      } else {
-        diffBtn.className = "px-2 py-0.5 rounded bg-slate-800 text-white font-semibold";
-        splitBtn.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white";
-        diffContainer.classList.remove('hidden');
-        splitContainer.classList.add('hidden');
-      }
-    }
-
-    // 1-Click Code Clipboard Copy
-    function copyCode(elementId) {
-      const el = document.getElementById(elementId);
-      if (!el) return;
-      navigator.clipboard.writeText(el.textContent).then(() => {
-        appendLog(`📋 Copied code to clipboard!`, "text-cyan-400");
+    async function streamEvents(body, onEvent) {
+      const res = await fetch("/api/stream/optimize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let end;
+        while ((end = buffer.indexOf("\n\n")) !== -1) {
+          const chunk = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+          if (line) onEvent(JSON.parse(line.slice(6)));
+        }
+      }
     }
 
-    // Toggle Expand / Collapse Full Height
+    async function startOptimizationDemo() {
+      const statusText = document.getElementById("status-text");
+      const body = { case: currentCase };
+      if (currentCase === "custom") {
+        body.custom_code = document.getElementById("custom-code-input").value;
+      }
+
+      resetResults();
+      setProgress(null);
+      setRunning(true);
+      statusText.innerText = "Running";
+
+      try {
+        await streamEvents(body, (event) => {
+          setProgress(event.stage);
+          if (event.stage === "baseline") {
+            showBaseline(event.metrics);
+          }
+          if (event.stage === "done") {
+            appendLog(event.message, event.status === "failed" ? "text-rose-400 font-bold" : "text-emerald-400 font-bold");
+            finish(event);
+            statusText.innerText = event.comparison && event.comparison.p50_speedup
+              ? `${event.comparison.p50_speedup}x faster p50`
+              : event.status;
+          } else {
+            appendLog(event.message, STAGE_STYLE[event.stage] || "text-slate-300");
+            if (event.stage === "error") statusText.innerText = "Error";
+          }
+        });
+      } catch (err) {
+        appendLog(`Request failed: ${err.message}`, STAGE_STYLE.error);
+        statusText.innerText = "Error";
+      } finally {
+        setRunning(false);
+      }
+    }
+
+    function showBaseline(before) {
+      document.getElementById("kpi-p50").innerText = `${before.p50} ms`;
+      document.getElementById("kpi-p95").innerText = `${before.p95} ms`;
+      document.getElementById("kpi-rps").innerText = `${before.rps} req/s`;
+      if (chart) {
+        chart.data.datasets[0].data = [before.p50, before.p95, before.avg];
+        chart.update();
+      }
+    }
+
+    function showDelta(id, before, after, higherIsBetter) {
+      const el = document.getElementById(id);
+      if (!before) return;
+      const pct = Math.round(((after - before) / before) * 100);
+      const better = higherIsBetter ? pct > 0 : pct < 0;
+      el.innerText = `${pct > 0 ? "+" : ""}${pct}%`;
+      el.className = `text-xs font-bold ${better ? "text-emerald-400" : "text-rose-400"}`;
+    }
+
+    function finish(data) {
+      const { before, after, comparison } = data;
+
+      if (after) {
+        document.getElementById("kpi-p50").innerText = `${after.p50} ms`;
+        document.getElementById("kpi-p95").innerText = `${after.p95} ms`;
+        document.getElementById("kpi-rps").innerText = `${after.rps} req/s`;
+        showDelta("delta-p50", before.p50, after.p50, false);
+        showDelta("delta-p95", before.p95, after.p95, false);
+        showDelta("delta-rps", before.rps, after.rps, true);
+        if (chart) {
+          chart.data.datasets[1].data = [after.p50, after.p95, after.avg];
+          chart.update();
+        }
+      }
+      if (comparison && comparison.p50_speedup) {
+        document.getElementById("kpi-speedup").innerText = `${comparison.p50_speedup}x`;
+        const badge = document.getElementById("speedup-badge");
+        badge.innerText = `p50 ${comparison.p50_speedup}x faster`;
+        badge.classList.remove("hidden");
+      }
+
+      document.getElementById("strategy-text").innerText =
+        [data.diagnosis, data.strategy].filter(Boolean).join(" ") || "No details.";
+      const parts = [sourceLabel(data.source), `status: ${data.status}`];
+      if (data.sandbox_route) parts.push(`mounted at ${data.sandbox_route}`);
+      document.getElementById("source-text").innerText = parts.filter(Boolean).join(" · ");
+      document.getElementById("after-label").innerText =
+        data.optimized_code && data.optimized_code !== data.original_code ? "Rewritten" : "Rewritten (no change)";
+
+      setCode("code-before", data.original_code);
+      setCode("code-after", data.optimized_code);
+      currentPatch = data.patch || "";
+      setCode("code-diff", currentPatch);
+      document.getElementById("download-patch-btn").classList.toggle("hidden", !currentPatch);
+    }
+
+    function switchDiffTab(tab) {
+      const split = tab === "split";
+      document.getElementById("tab-split").className = split
+        ? "px-2 py-0.5 rounded bg-slate-800 text-white font-semibold"
+        : "px-2 py-0.5 rounded text-slate-400 hover:text-white";
+      document.getElementById("tab-diff").className = split
+        ? "px-2 py-0.5 rounded text-slate-400 hover:text-white"
+        : "px-2 py-0.5 rounded bg-slate-800 text-white font-semibold";
+      document.getElementById("view-split-container").classList.toggle("hidden", !split);
+      document.getElementById("view-diff-container").classList.toggle("hidden", split);
+    }
+
+    function copyCode(id) {
+      const text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(() => appendLog("Copied to clipboard.", "text-slate-400"));
+    }
+
     function toggleExpand(preId, btn) {
       const pre = document.getElementById(preId);
-      if (!pre) return;
-      if (pre.classList.contains('max-h-[250px]')) {
-        pre.classList.remove('max-h-[250px]');
-        pre.classList.add('max-h-none');
-        btn.innerHTML = `<i data-lucide="minimize-2" class="w-3 h-3"></i> Collapse`;
-      } else if (pre.classList.contains('max-h-[520px]')) {
-        pre.classList.remove('max-h-[520px]');
-        pre.classList.add('max-h-none');
-        btn.innerHTML = `<i data-lucide="minimize-2" class="w-3 h-3"></i> Collapse`;
-      } else {
-        if (preId === 'code-diff-pre') {
-          pre.classList.remove('max-h-none');
-          pre.classList.add('max-h-[520px]');
-        } else {
-          pre.classList.remove('max-h-none');
-          pre.classList.add('max-h-[250px]');
-        }
-        btn.innerHTML = `<i data-lucide="maximize-2" class="w-3 h-3"></i> Expand`;
-      }
-      if (window.lucide) lucide.createIcons();
+      const collapsed = preId === "code-diff-pre" ? "max-h-[520px]" : "max-h-[250px]";
+      const expanding = pre.classList.contains(collapsed);
+      pre.classList.toggle(collapsed, !expanding);
+      pre.classList.toggle("max-h-none", expanding);
+      btn.innerHTML = expanding
+        ? '<i data-lucide="minimize-2" class="w-3 h-3"></i> Collapse'
+        : '<i data-lucide="maximize-2" class="w-3 h-3"></i> Expand';
+      refreshIcons();
     }
 
-    // Direct Browser Download of .patch File
     function downloadPatchFile() {
-      if (!currentPatchContent) return;
-      const blob = new Blob([currentPatchContent], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      if (!currentPatch) return;
+      const url = URL.createObjectURL(new Blob([currentPatch], { type: "text/plain;charset=utf-8" }));
+      const link = document.createElement("a");
       link.href = url;
-      link.download = `latencyzero_${currentCase}_optimization.patch`;
-      document.body.appendChild(link);
+      link.download = `latencyzero-${currentCase}.patch`;
       link.click();
-      document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      appendLog(`📥 Downloaded git patch: latencyzero_${currentCase}_optimization.patch`, "text-emerald-400 font-bold");
     }
 
-    window.onload = function() {
-      initChart();
-    };
+    refreshIcons();
+    initChart();
   </script>
 </body>
 </html>

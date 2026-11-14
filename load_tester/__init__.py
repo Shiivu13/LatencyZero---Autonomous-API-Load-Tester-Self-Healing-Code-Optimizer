@@ -1,4 +1,4 @@
-from .tester import run_load_test, LoadTestResult
+from .tester import LoadTestResult, LocalServer, benchmark_url, run_load_test
 
-__all__ = ["run_load_test", "LoadTestResult"]
+__all__ = ["LoadTestResult", "LocalServer", "benchmark_url", "run_load_test"]
 

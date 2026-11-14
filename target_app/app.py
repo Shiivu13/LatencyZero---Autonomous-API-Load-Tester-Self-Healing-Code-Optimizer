@@ -1,15 +1,17 @@
 import os
 import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
 from typing import Optional
+
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
-from target_app.database import get_db, init_db
+
 from dashboard.stream import generate_optimization_events
+from target_app.database import get_db, init_db
 
 DASHBOARD_HTML = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
+SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
 class OptimizeRequest(BaseModel):
@@ -24,51 +26,34 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="LatencyZero - Slow Target App & Autonomous Optimizer",
-    description="Intentional performance bottlenecks with autonomous self-healing optimization dashboard",
-    lifespan=lifespan
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    title="LatencyZero",
+    description="Demo app with deliberately slow endpoints, plus the dashboard that benchmarks and rewrites them.",
+    lifespan=lifespan,
 )
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 def dashboard():
-    """Serves the 3-panel LatencyZero live optimization dashboard."""
     return FileResponse(DASHBOARD_HTML)
 
 
 @app.get("/api/stream/optimize")
-async def stream_optimize(case: str = "case1", custom_code: Optional[str] = None):
-    """Streams live autonomous optimization progress via Server-Sent Events (SSE)."""
+async def stream_optimize(case: str = "case1"):
+    """Run one of the bundled cases and stream progress as Server-Sent Events."""
     return StreamingResponse(
-        generate_optimization_events(case, custom_code),
+        generate_optimization_events(case),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
+        headers=SSE_HEADERS,
     )
 
 
 @app.post("/api/stream/optimize")
 async def post_stream_optimize(req: OptimizeRequest):
-    """POST variant allowing large custom code snippets to be streamed via SSE."""
+    """Same as the GET route; use case="custom" with custom_code to review pasted code."""
     return StreamingResponse(
         generate_optimization_events(req.case, req.custom_code),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
+        headers=SSE_HEADERS,
     )
 
 
@@ -76,6 +61,9 @@ async def post_stream_optimize(req: OptimizeRequest):
 def health():
     return {"status": "ok", "app": "slow_target_app"}
 
+
+# The three endpoints below are slow on purpose. They are the inputs for the
+# optimizer; don't fix them here.
 
 # ---------------------------------------------------------------------------
 # CASE 1: Unindexed N+1 SQLite Loop

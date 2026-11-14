@@ -1,193 +1,173 @@
 import os
+
 import pytest
 from fastapi import FastAPI
-from analyzer.extractor import extract_from_file
-from optimizer.client import BharatCodeOptimizerClient, OptimizationProposal
+
+from analyzer.extractor import EndpointCodeSnippet, extract_from_file
+from optimizer.client import (
+    BharatCodeOptimizerClient,
+    OptimizationProposal,
+    OptimizerError,
+    parse_llm_json,
+)
 from optimizer.sandbox import DynamicSandbox
 from optimizer.self_healing import SelfHealingLoop
-
+import target_app.app as target
 
 APP_PATH = os.path.join(os.path.dirname(__file__), "..", "target_app", "app.py")
 
 
-def test_sandbox_compile_and_dry_run_success():
-    sandbox = DynamicSandbox()
-    code = (
-        'def test_fn():\n'
-        '    return {"status": "ok", "value": 123}\n'
-    )
-    ok, func, err = sandbox.compile_function(code, "test_fn")
-    assert ok is True
-    assert err is None
-    assert callable(func)
-
-    run_ok, res, run_err = sandbox.dry_run(func)
-    assert run_ok is True
-    assert run_err is None
-    assert res == {"status": "ok", "value": 123}
+def snippet_for(route):
+    snippet = extract_from_file(APP_PATH, route_path=route)
+    assert snippet is not None
+    return snippet
 
 
-def test_sandbox_compile_syntax_error():
-    sandbox = DynamicSandbox()
-    bad_code = 'def broken_syntax(:\n    return 42'
-    ok, func, err = sandbox.compile_function(bad_code)
-    assert ok is False
-    assert func is None
+class ScriptedClient(BharatCodeOptimizerClient):
+    """Returns pre-written proposals in order, recording the feedback it gets."""
+
+    def __init__(self, codes):
+        super().__init__(api_key="test-key")
+        self.codes = list(codes)
+        self.errors = []
+
+    def optimize_endpoint(self, code_snippet, baseline_metrics=None, previous_error=None):
+        self.errors.append(previous_error)
+        return OptimizationProposal("diag", "strategy", self.codes.pop(0), "", source="llm:test")
+
+
+def test_sandbox_compile_and_dry_run():
+    sandbox = DynamicSandbox(target_app=FastAPI())
+    ok, func, err = sandbox.compile_function("def f():\n    return {'value': 123}\n", "f")
+    assert ok and err is None
+
+    ok, result, err = sandbox.dry_run(func)
+    assert ok and result == {"value": 123}
+
+
+def test_sandbox_runs_async_functions():
+    sandbox = DynamicSandbox(target_app=FastAPI())
+    ok, func, _ = sandbox.compile_function("async def f():\n    await asyncio.sleep(0)\n    return 1\n")
+    assert ok
+    assert sandbox.dry_run(func) == (True, 1, None)
+
+
+def test_sandbox_syntax_error():
+    sandbox = DynamicSandbox(target_app=FastAPI())
+    ok, func, err = sandbox.compile_function("def broken(:\n    return 42")
+    assert not ok and func is None
     assert "SyntaxError" in err
 
 
-def test_sandbox_dry_run_runtime_error():
-    sandbox = DynamicSandbox()
-    runtime_fail_code = (
-        'def failing_fn():\n'
-        '    return 1 / 0\n'
-    )
-    ok, func, err = sandbox.compile_function(runtime_fail_code, "failing_fn")
-    assert ok is True
-    run_ok, res, run_err = sandbox.dry_run(func)
-    assert run_ok is False
-    assert res is None
-    assert "ZeroDivisionError" in run_err
+def test_sandbox_runtime_error():
+    sandbox = DynamicSandbox(target_app=FastAPI())
+    _, func, _ = sandbox.compile_function("def f():\n    return 1 / 0\n")
+    ok, _, err = sandbox.dry_run(func)
+    assert not ok
+    assert "ZeroDivisionError" in err
 
 
-def test_sandbox_mount_route():
+def test_sandbox_does_not_register_decorated_route():
     app = FastAPI()
     sandbox = DynamicSandbox(target_app=app)
-    def my_custom_ep():
-        return {"custom": True}
-
-    mounted_path = sandbox.mount_sandbox_route(my_custom_ep, "/api/sandbox/test-ep")
-    assert mounted_path == "/api/sandbox/test-ep"
-    registered_paths = [r.path for r in app.routes if hasattr(r, "path")]
-    assert "/api/sandbox/test-ep" in registered_paths
+    routes_before = len(app.routes)
+    ok, _, _ = sandbox.compile_function('@app.get("/x")\ndef f():\n    return 1\n')
+    assert ok
+    assert len(app.routes) == routes_before
 
 
-def test_self_healing_case1_n_plus_one():
-    snippet = extract_from_file(APP_PATH, route_path="/api/slow/n-plus-one")
-    assert snippet is not None
+def test_sandbox_mount_replaces_existing_route():
+    app = FastAPI()
+    sandbox = DynamicSandbox(target_app=app)
 
+    def handler():
+        return {}
+
+    sandbox.mount_sandbox_route(handler, "/api/sandbox/x")
+    sandbox.mount_sandbox_route(handler, "/api/sandbox/x")
+    assert [r.path for r in app.routes].count("/api/sandbox/x") == 1
+
+
+@pytest.mark.parametrize("route,func_name", [
+    ("/api/slow/n-plus-one", "slow_n_plus_one"),
+    ("/api/slow/sync-blocking", "slow_sync_blocking"),
+    ("/api/slow/heavy-json", "slow_heavy_json"),
+])
+def test_offline_fix_matches_original_response(route, func_name):
     loop = SelfHealingLoop()
-    result = loop.optimize_and_heal(
-        endpoint_snippet=snippet,
-        baseline_metrics={"p50_ms": 25.0, "p95_ms": 45.0, "rps": 35.0},
-        mount_to_sandbox=True
-    )
+    result = loop.optimize_and_heal(snippet_for(route), reference_function=getattr(target, func_name))
 
-    assert result.status in ("success", "healed")
-    assert result.sandbox_route == "/api/sandbox/slow_n_plus_one"
-    assert result.mounted_function is not None
-    assert "N+1" in result.bottleneck_diagnosis
-    assert result.attempts_count >= 1
+    assert result.status == "success"
+    assert result.source.startswith("offline:")
+    assert result.verified_function is not None
+    assert result.optimized_code != result.original_code
 
 
-def test_self_healing_case2_sync_blocking():
-    snippet = extract_from_file(APP_PATH, route_path="/api/slow/sync-blocking")
-    assert snippet is not None
+def test_heals_after_runtime_error():
+    client = ScriptedClient([
+        "def f():\n    return 10 / 0\n",
+        "def f():\n    return {'answer': 42}\n",
+    ])
+    loop = SelfHealingLoop(client=client)
+    result = loop.optimize_and_heal(snippet_for("/api/slow/heavy-json"))
 
-    loop = SelfHealingLoop()
-    result = loop.optimize_and_heal(
-        endpoint_snippet=snippet,
-        baseline_metrics={"p50_ms": 250.0, "p95_ms": 252.0, "rps": 3.9},
-        mount_to_sandbox=True
-    )
-
-    assert result.status in ("success", "healed")
-    assert result.sandbox_route == "/api/sandbox/slow_sync_blocking"
-    assert "time.sleep" in result.bottleneck_diagnosis or "blocking" in result.bottleneck_diagnosis.lower()
-
-
-def test_self_healing_case3_heavy_json():
-    snippet = extract_from_file(APP_PATH, route_path="/api/slow/heavy-json")
-    assert snippet is not None
-
-    loop = SelfHealingLoop()
-    result = loop.optimize_and_heal(
-        endpoint_snippet=snippet,
-        baseline_metrics={"p50_ms": 22.0, "p95_ms": 30.0, "rps": 40.0},
-        mount_to_sandbox=True
-    )
-
-    assert result.status in ("success", "healed")
-    assert result.sandbox_route == "/api/sandbox/slow_heavy_json"
-    assert "O(N^2)" in result.bottleneck_diagnosis or "quadratic" in result.bottleneck_diagnosis.lower()
-
-
-def test_self_healing_auto_heal_recovery():
-    """Simulates an initial buggy code suggestion from LLM that triggers error, then heals on attempt 2."""
-    class MockFlakyClient(BharatCodeOptimizerClient):
-        def __init__(self):
-            super().__init__()
-            self.call_count = 0
-
-        def optimize_endpoint(self, code_snippet, baseline_metrics, previous_error=None, timeout=30.0):
-            self.call_count += 1
-            if self.call_count == 1:
-                # Deliberate runtime bug in first attempt
-                buggy_code = (
-                    '@app.get("/api/test/flaky")\n'
-                    'def flaky():\n'
-                    '    return 10 / 0\n'
-                )
-                return OptimizationProposal(
-                    bottleneck_diagnosis="Buggy attempt",
-                    optimization_strategy="Introduce zero division error to trigger self-healing",
-                    optimized_code=buggy_code,
-                    function_name="flaky",
-                    model_used="mock"
-                )
-            else:
-                # Fixed/healed code in second attempt
-                fixed_code = (
-                    '@app.get("/api/test/flaky")\n'
-                    'def flaky():\n'
-                    '    return {"status": "healed", "answer": 42}\n'
-                )
-                return OptimizationProposal(
-                    bottleneck_diagnosis="Healed zero division bug",
-                    optimization_strategy="Corrected denominator logic",
-                    optimized_code=fixed_code,
-                    function_name="flaky",
-                    model_used="mock"
-                )
-
-    snippet = extract_from_file(APP_PATH, route_path="/api/slow/heavy-json")
-    flaky_client = MockFlakyClient()
-    loop = SelfHealingLoop(client=flaky_client)
-
-    result = loop.optimize_and_heal(snippet, {"p50_ms": 10.0})
     assert result.status == "healed"
     assert result.attempts_count == 2
-    assert len(result.attempts_history) == 2
     assert result.attempts_history[0].success is False
-    assert "ZeroDivisionError" in result.attempts_history[0].error_traceback
-    assert result.attempts_history[1].success is True
+    assert "ZeroDivisionError" in client.errors[1]
 
 
-def test_self_healing_custom_code_with_requests():
-    """Verifies that user-pasted custom code with synchronous requests is optimized cleanly."""
-    from analyzer.extractor import EndpointCodeSnippet
-    custom_snippet = EndpointCodeSnippet(
-        func_name="enrich_profiles",
-        is_async=False,
-        route_path="/api/enrich-profiles",
-        http_method="POST",
-        start_line=1,
-        end_line=5,
-        code_string=(
-            '@router.post("/api/enrich-profiles")\n'
-            'def enrich_profiles():\n'
-            '    response = requests.get("https://api.github.com/users/octocat")\n'
-            '    return {"status": "enriched"}\n'
-        )
-    )
-    loop = SelfHealingLoop()
+def test_rejects_rewrite_with_different_response():
+    client = ScriptedClient(["def f():\n    return {'status': 'different'}\n"] * 3)
+    loop = SelfHealingLoop(client=client, max_retries=3)
     result = loop.optimize_and_heal(
-        endpoint_snippet=custom_snippet,
-        baseline_metrics={"p50_ms": 185.0},
-        mount_to_sandbox=True
+        snippet_for("/api/slow/heavy-json"),
+        reference_function=target.slow_heavy_json,
     )
-    assert result.status in ("success", "healed")
-    assert result.sandbox_route == "/api/sandbox/enrich_profiles"
-    assert "None" not in result.sandbox_route
-    assert "requests" in result.bottleneck_diagnosis.lower()
 
+    assert result.status == "failed"
+    assert result.verified_function is None
+    assert result.attempts_count == 3
+    assert "different response" in client.errors[1]
+
+
+def test_falls_back_to_offline_when_llm_errors():
+    class BrokenClient(BharatCodeOptimizerClient):
+        def optimize_endpoint(self, *args, **kwargs):
+            raise OptimizerError("HTTP 402")
+
+    loop = SelfHealingLoop(client=BrokenClient(api_key="k"))
+    result = loop.optimize_and_heal(snippet_for("/api/slow/sync-blocking"))
+
+    assert result.status == "success"
+    assert result.source == "offline:rewrite"
+    assert any("HTTP 402" in note for note in result.notes)
+
+
+def test_unchanged_when_nothing_to_fix():
+    snippet = EndpointCodeSnippet(
+        func_name="fast", is_async=False, route_path="/fast", http_method="GET",
+        start_line=1, end_line=2, code_string="def fast():\n    return {'ok': True}",
+    )
+    result = SelfHealingLoop().optimize_and_heal(snippet)
+    assert result.status == "unchanged"
+    assert not result.ok
+
+
+def test_parse_llm_json_with_fence():
+    raw = '```json\n{"optimized_code": "def f():\\n    return 1", "function_name": "f"}\n```'
+    proposal = parse_llm_json(raw, source="llm:test")
+    assert proposal.optimized_code == "def f():\n    return 1"
+    assert proposal.function_name == "f"
+
+
+def test_parse_llm_json_rejects_garbage():
+    with pytest.raises(OptimizerError):
+        parse_llm_json("sorry, I can't help", source="llm:test")
+
+
+def test_client_without_key_is_unavailable():
+    client = BharatCodeOptimizerClient(api_key="")
+    assert not client.available
+    with pytest.raises(OptimizerError):
+        client.optimize_endpoint("def f(): pass")

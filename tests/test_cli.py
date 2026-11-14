@@ -1,18 +1,16 @@
-from cli import run_cli_optimization
+import json
+
+from cli import main
 
 
-def test_cli_runner_json_output(capsys):
-    run_cli_optimization(target_case="case1", json_output=True)
-    captured = capsys.readouterr()
-    assert "case1" in captured.out
-    assert "p50_before_ms" in captured.out
-    assert "speedup_multiplier" in captured.out
+def test_cli_json_single_case(capsys):
+    exit_code = main(["--case", "case3", "--requests", "4", "--concurrency", "2", "--json"])
+    results = json.loads(capsys.readouterr().out)
 
-
-def test_cli_runner_all_cases(capsys):
-    run_cli_optimization(target_case="all", json_output=True)
-    captured = capsys.readouterr()
-    assert "case1" in captured.out
-    assert "case2" in captured.out
-    assert "case3" in captured.out
-
+    assert exit_code == 0
+    assert len(results) == 1
+    result = results[0]
+    assert result["case"] == "case3"
+    assert result["status"] == "success"
+    assert result["before"]["requests"] == 4
+    assert result["after"]["p50"] > 0
